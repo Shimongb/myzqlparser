@@ -450,7 +450,7 @@ pub fn writeExpr(w: *Writer, expr: ast.Expr) Writer.Error!void {
             try w.writeAll("POSITION(");
             try writeExpr(w, pos.expr.*);
             try w.writeAll(" IN ");
-            try writeExpr(w, pos.@"in".*);
+            try writeExpr(w, pos.in.*);
             try w.writeByte(')');
         },
         .interval => |iv| {

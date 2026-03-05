@@ -307,9 +307,9 @@ pub const JoinConstraint = union(enum) {
 
 /// The join operator type.
 pub const JoinOperator = union(enum) {
-    /// Bare JOIN (no INNER keyword) → oracle "Join"
+    /// Bare JOIN (no INNER keyword)
     join: JoinConstraint,
-    /// INNER JOIN → oracle "Inner"
+    /// INNER JOIN
     inner: JoinConstraint,
     left_outer: JoinConstraint,
     right_outer: JoinConstraint,
