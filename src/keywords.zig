@@ -1401,7 +1401,6 @@ pub fn lookupKeywordCaseInsensitive(word: []const u8) Keyword {
 }
 
 /// Keywords that cannot be used as a table alias in FROM/JOIN position.
-/// Ported from Rust's RESERVED_FOR_TABLE_ALIAS.
 pub const RESERVED_FOR_TABLE_ALIAS: []const Keyword = &.{
     .WITH,
     .EXPLAIN,

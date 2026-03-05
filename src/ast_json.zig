@@ -1,8 +1,5 @@
 /// JSON serialization for AST types.
 ///
-/// Produces JSON that matches the structural conventions of the Rust oracle
-/// fixtures in test-fixtures/. Key conventions observed from fixtures:
-///
 ///   - Tagged union variants: written as `{"VariantName": <payload>}` objects.
 ///   - `Ident`: written as `{"value": "...", "quote_style": null|"x", "span": {...}}`.
 ///   - `Value::Number`: written as `["raw_str", is_long_bool]`.
@@ -10,7 +7,7 @@
 ///   - `Value::null`: written as JSON `null`.
 ///   - `Value::boolean`: written as JSON `true`/`false`.
 ///   - `BinaryOp`, `UnaryOp`: written as their Zig tag name string ("Plus", "Gt", ...).
-///   - `ObjectName`: written as a JSON array of Ident objects (matches Rust `Vec<Ident>`).
+///   - `ObjectName`: written as a JSON array of Ident objects.
 ///   - `Span`/`Location`: written as nested objects with `line`/`column` fields.
 ///   - Optional `?T`: written as `null` or the value.
 ///   - Slices `[]const T`: written as JSON arrays.
@@ -93,7 +90,6 @@ fn writeTokenWithSpan(jw: *Jw, tok: tokenizer_mod.TokenWithSpan) Jw.Error!void {
     try jw.endObject();
 }
 
-
 // ---------------------------------------------------------------------------
 // Ident
 // ---------------------------------------------------------------------------
@@ -114,8 +110,8 @@ pub fn writeIdent(jw: *Jw, id: ast.Ident) Jw.Error!void {
     try jw.endObject();
 }
 
-/// ObjectName is a JSON array of tagged Ident objects (matching Rust Vec<ObjectNamePart>).
-/// Each identifier is wrapped as {"Identifier": {...}} to match the Rust oracle.
+/// ObjectName is a JSON array of tagged Ident objects.
+/// Each identifier is wrapped as {"Identifier": {...}}.
 pub fn writeObjectName(jw: *Jw, name: ast.ObjectName) Jw.Error!void {
     try jw.beginArray();
     for (name.parts) |part| {
@@ -134,7 +130,6 @@ pub fn writeObjectName(jw: *Jw, name: ast.ObjectName) Jw.Error!void {
 pub fn writeValue(jw: *Jw, v: ast.Value) Jw.Error!void {
     switch (v) {
         .number => |n| {
-            // Matches Rust fixture: {"Number": ["42", false]}
             try jw.beginObject();
             try jw.objectField("Number");
             try jw.beginArray();
@@ -144,7 +139,6 @@ pub fn writeValue(jw: *Jw, v: ast.Value) Jw.Error!void {
             try jw.endObject();
         },
         .single_quoted_string => |s| {
-            // Matches Rust fixture: {"SingleQuotedString": "hello"}
             try jw.beginObject();
             try jw.objectField("SingleQuotedString");
             try jw.write(s);
@@ -169,14 +163,12 @@ pub fn writeValue(jw: *Jw, v: ast.Value) Jw.Error!void {
             try jw.endObject();
         },
         .boolean => |b| {
-            // Matches Rust fixture: {"Boolean": true}
             try jw.beginObject();
             try jw.objectField("Boolean");
             try jw.write(b);
             try jw.endObject();
         },
         .null => {
-            // Matches Rust fixture: "Null" (a string, not JSON null)
             try jw.write("Null");
         },
         .placeholder => |p| {
@@ -205,63 +197,212 @@ pub fn writeUnaryOp(jw: *Jw, op: ast_operator.UnaryOp) Jw.Error!void {
 // ---------------------------------------------------------------------------
 
 pub fn writeDataType(jw: *Jw, dt: ast_types.DataType) Jw.Error!void {
-    // Some data types serialize as plain strings (not objects) in the oracle fixture.
     switch (dt) {
-        .text => { try jw.write("Text"); return; },
+        .text => {
+            try jw.write("Text");
+            return;
+        },
         else => {},
     }
     try jw.beginObject();
     switch (dt) {
-        .char => |len| { try jw.objectField("Char"); try writeOptCharLen(jw, len); },
-        .char_varying => |len| { try jw.objectField("CharVarying"); try writeOptCharLen(jw, len); },
-        .varchar => |len| { try jw.objectField("Varchar"); try writeOptCharLen(jw, len); },
-        .nvarchar => |len| { try jw.objectField("Nvarchar"); try writeOptCharLen(jw, len); },
-        .char_large_object => |len| { try jw.objectField("CharLargeObject"); try jw.write(len); },
-        .clob => |len| { try jw.objectField("Clob"); try jw.write(len); },
+        .char => |len| {
+            try jw.objectField("Char");
+            try writeOptCharLen(jw, len);
+        },
+        .char_varying => |len| {
+            try jw.objectField("CharVarying");
+            try writeOptCharLen(jw, len);
+        },
+        .varchar => |len| {
+            try jw.objectField("Varchar");
+            try writeOptCharLen(jw, len);
+        },
+        .nvarchar => |len| {
+            try jw.objectField("Nvarchar");
+            try writeOptCharLen(jw, len);
+        },
+        .char_large_object => |len| {
+            try jw.objectField("CharLargeObject");
+            try jw.write(len);
+        },
+        .clob => |len| {
+            try jw.objectField("Clob");
+            try jw.write(len);
+        },
         .text => unreachable,
-        .tiny_text => { try jw.objectField("TinyText"); try jw.write(null); },
-        .medium_text => { try jw.objectField("MediumText"); try jw.write(null); },
-        .long_text => { try jw.objectField("LongText"); try jw.write(null); },
-        .uuid => { try jw.objectField("Uuid"); try jw.write(null); },
-        .binary => |len| { try jw.objectField("Binary"); try jw.write(len); },
-        .varbinary => |len| { try jw.objectField("Varbinary"); try writeOptBinaryLen(jw, len); },
-        .blob => |len| { try jw.objectField("Blob"); try jw.write(len); },
-        .tiny_blob => { try jw.objectField("TinyBlob"); try jw.write(null); },
-        .medium_blob => { try jw.objectField("MediumBlob"); try jw.write(null); },
-        .long_blob => { try jw.objectField("LongBlob"); try jw.write(null); },
-        .bytea => { try jw.objectField("Bytea"); try jw.write(null); },
-        .numeric => |info| { try jw.objectField("Numeric"); try writeExactNumberInfo(jw, info); },
-        .decimal => |info| { try jw.objectField("Decimal"); try writeExactNumberInfo(jw, info); },
-        .decimal_unsigned => |info| { try jw.objectField("DecimalUnsigned"); try writeExactNumberInfo(jw, info); },
-        .dec => |info| { try jw.objectField("Dec"); try writeExactNumberInfo(jw, info); },
-        .dec_unsigned => |info| { try jw.objectField("DecUnsigned"); try writeExactNumberInfo(jw, info); },
-        .tiny_int => |d| { try jw.objectField("TinyInt"); try jw.write(d); },
-        .tiny_int_unsigned => |d| { try jw.objectField("TinyIntUnsigned"); try jw.write(d); },
-        .small_int => |d| { try jw.objectField("SmallInt"); try jw.write(d); },
-        .small_int_unsigned => |d| { try jw.objectField("SmallIntUnsigned"); try jw.write(d); },
-        .medium_int => |d| { try jw.objectField("MediumInt"); try jw.write(d); },
-        .medium_int_unsigned => |d| { try jw.objectField("MediumIntUnsigned"); try jw.write(d); },
-        .int => |d| { try jw.objectField("Int"); try jw.write(d); },
-        .int_unsigned => |d| { try jw.objectField("IntUnsigned"); try jw.write(d); },
-        .integer => |d| { try jw.objectField("Integer"); try jw.write(d); },
-        .integer_unsigned => |d| { try jw.objectField("IntegerUnsigned"); try jw.write(d); },
-        .big_int => |d| { try jw.objectField("BigInt"); try jw.write(d); },
-        .big_int_unsigned => |d| { try jw.objectField("BigIntUnsigned"); try jw.write(d); },
-        .signed => { try jw.objectField("Signed"); try jw.write(null); },
-        .signed_integer => { try jw.objectField("SignedInteger"); try jw.write(null); },
-        .unsigned => { try jw.objectField("Unsigned"); try jw.write(null); },
-        .unsigned_integer => { try jw.objectField("UnsignedInteger"); try jw.write(null); },
-        .float => |info| { try jw.objectField("Float"); try writeExactNumberInfo(jw, info); },
-        .float_unsigned => |info| { try jw.objectField("FloatUnsigned"); try writeExactNumberInfo(jw, info); },
-        .real => { try jw.objectField("Real"); try jw.write(null); },
-        .real_unsigned => { try jw.objectField("RealUnsigned"); try jw.write(null); },
-        .double => |info| { try jw.objectField("Double"); try writeExactNumberInfo(jw, info); },
-        .double_unsigned => |info| { try jw.objectField("DoubleUnsigned"); try writeExactNumberInfo(jw, info); },
-        .double_precision => { try jw.objectField("DoublePrecision"); try jw.write(null); },
-        .double_precision_unsigned => { try jw.objectField("DoublePrecisionUnsigned"); try jw.write(null); },
-        .bool => { try jw.objectField("Bool"); try jw.write(null); },
-        .boolean => { try jw.objectField("Boolean"); try jw.write(null); },
-        .date => { try jw.objectField("Date"); try jw.write(null); },
+        .tiny_text => {
+            try jw.objectField("TinyText");
+            try jw.write(null);
+        },
+        .medium_text => {
+            try jw.objectField("MediumText");
+            try jw.write(null);
+        },
+        .long_text => {
+            try jw.objectField("LongText");
+            try jw.write(null);
+        },
+        .uuid => {
+            try jw.objectField("Uuid");
+            try jw.write(null);
+        },
+        .binary => |len| {
+            try jw.objectField("Binary");
+            try jw.write(len);
+        },
+        .varbinary => |len| {
+            try jw.objectField("Varbinary");
+            try writeOptBinaryLen(jw, len);
+        },
+        .blob => |len| {
+            try jw.objectField("Blob");
+            try jw.write(len);
+        },
+        .tiny_blob => {
+            try jw.objectField("TinyBlob");
+            try jw.write(null);
+        },
+        .medium_blob => {
+            try jw.objectField("MediumBlob");
+            try jw.write(null);
+        },
+        .long_blob => {
+            try jw.objectField("LongBlob");
+            try jw.write(null);
+        },
+        .bytea => {
+            try jw.objectField("Bytea");
+            try jw.write(null);
+        },
+        .numeric => |info| {
+            try jw.objectField("Numeric");
+            try writeExactNumberInfo(jw, info);
+        },
+        .decimal => |info| {
+            try jw.objectField("Decimal");
+            try writeExactNumberInfo(jw, info);
+        },
+        .decimal_unsigned => |info| {
+            try jw.objectField("DecimalUnsigned");
+            try writeExactNumberInfo(jw, info);
+        },
+        .dec => |info| {
+            try jw.objectField("Dec");
+            try writeExactNumberInfo(jw, info);
+        },
+        .dec_unsigned => |info| {
+            try jw.objectField("DecUnsigned");
+            try writeExactNumberInfo(jw, info);
+        },
+        .tiny_int => |d| {
+            try jw.objectField("TinyInt");
+            try jw.write(d);
+        },
+        .tiny_int_unsigned => |d| {
+            try jw.objectField("TinyIntUnsigned");
+            try jw.write(d);
+        },
+        .small_int => |d| {
+            try jw.objectField("SmallInt");
+            try jw.write(d);
+        },
+        .small_int_unsigned => |d| {
+            try jw.objectField("SmallIntUnsigned");
+            try jw.write(d);
+        },
+        .medium_int => |d| {
+            try jw.objectField("MediumInt");
+            try jw.write(d);
+        },
+        .medium_int_unsigned => |d| {
+            try jw.objectField("MediumIntUnsigned");
+            try jw.write(d);
+        },
+        .int => |d| {
+            try jw.objectField("Int");
+            try jw.write(d);
+        },
+        .int_unsigned => |d| {
+            try jw.objectField("IntUnsigned");
+            try jw.write(d);
+        },
+        .integer => |d| {
+            try jw.objectField("Integer");
+            try jw.write(d);
+        },
+        .integer_unsigned => |d| {
+            try jw.objectField("IntegerUnsigned");
+            try jw.write(d);
+        },
+        .big_int => |d| {
+            try jw.objectField("BigInt");
+            try jw.write(d);
+        },
+        .big_int_unsigned => |d| {
+            try jw.objectField("BigIntUnsigned");
+            try jw.write(d);
+        },
+        .signed => {
+            try jw.objectField("Signed");
+            try jw.write(null);
+        },
+        .signed_integer => {
+            try jw.objectField("SignedInteger");
+            try jw.write(null);
+        },
+        .unsigned => {
+            try jw.objectField("Unsigned");
+            try jw.write(null);
+        },
+        .unsigned_integer => {
+            try jw.objectField("UnsignedInteger");
+            try jw.write(null);
+        },
+        .float => |info| {
+            try jw.objectField("Float");
+            try writeExactNumberInfo(jw, info);
+        },
+        .float_unsigned => |info| {
+            try jw.objectField("FloatUnsigned");
+            try writeExactNumberInfo(jw, info);
+        },
+        .real => {
+            try jw.objectField("Real");
+            try jw.write(null);
+        },
+        .real_unsigned => {
+            try jw.objectField("RealUnsigned");
+            try jw.write(null);
+        },
+        .double => |info| {
+            try jw.objectField("Double");
+            try writeExactNumberInfo(jw, info);
+        },
+        .double_unsigned => |info| {
+            try jw.objectField("DoubleUnsigned");
+            try writeExactNumberInfo(jw, info);
+        },
+        .double_precision => {
+            try jw.objectField("DoublePrecision");
+            try jw.write(null);
+        },
+        .double_precision_unsigned => {
+            try jw.objectField("DoublePrecisionUnsigned");
+            try jw.write(null);
+        },
+        .bool => {
+            try jw.objectField("Bool");
+            try jw.write(null);
+        },
+        .boolean => {
+            try jw.objectField("Boolean");
+            try jw.write(null);
+        },
+        .date => {
+            try jw.objectField("Date");
+            try jw.write(null);
+        },
         .time => |info| {
             try jw.objectField("Time");
             try jw.beginObject();
@@ -271,10 +412,13 @@ pub fn writeDataType(jw: *Jw, dt: ast_types.DataType) Jw.Error!void {
             try jw.write(@tagName(info.tz));
             try jw.endObject();
         },
-        .datetime => |fsp| { try jw.objectField("Datetime"); try jw.write(fsp); },
+        .datetime => |fsp| {
+            try jw.objectField("Datetime");
+            try jw.write(fsp);
+        },
         .timestamp => |info| {
             try jw.objectField("Timestamp");
-            // Oracle emits Timestamp as a 2-element array: [precision, "TzType"]
+            // Timestamp as a 2-element array: [precision, "TzType"]
             try jw.beginArray();
             try jw.write(info.precision);
             try jw.write(switch (info.tz) {
@@ -284,12 +428,21 @@ pub fn writeDataType(jw: *Jw, dt: ast_types.DataType) Jw.Error!void {
             });
             try jw.endArray();
         },
-        .json => { try jw.objectField("Json"); try jw.write(null); },
-        .bit => |len| { try jw.objectField("Bit"); try jw.write(len); },
-        .bit_varying => |len| { try jw.objectField("BitVarying"); try jw.write(len); },
+        .json => {
+            try jw.objectField("Json");
+            try jw.write(null);
+        },
+        .bit => |len| {
+            try jw.objectField("Bit");
+            try jw.write(len);
+        },
+        .bit_varying => |len| {
+            try jw.objectField("BitVarying");
+            try jw.write(len);
+        },
         .@"enum" => |variants| {
             try jw.objectField("Enum");
-            // Oracle emits: [[{Name: "v1"}, {Name: "v2"}, ...], null]
+            // Emits: [[{Name: "v1"}, {Name: "v2"}, ...], null]
             try jw.beginArray();
             try jw.beginArray();
             for (variants) |v| {
@@ -327,7 +480,10 @@ pub fn writeDataType(jw: *Jw, dt: ast_types.DataType) Jw.Error!void {
                 try jw.write(null);
             }
         },
-        .unspecified => { try jw.objectField("Unspecified"); try jw.write(null); },
+        .unspecified => {
+            try jw.objectField("Unspecified");
+            try jw.write(null);
+        },
     }
     try jw.endObject();
 }
@@ -654,7 +810,7 @@ pub fn writeExpr(jw: *Jw, expr: ast.Expr) Jw.Error!void {
             try jw.objectField("expr");
             try writeExpr(jw, pos.expr.*);
             try jw.objectField("in");
-            try writeExpr(jw, pos.@"in".*);
+            try writeExpr(jw, pos.in.*);
             try jw.endObject();
         },
         .interval => |iv| {
@@ -781,7 +937,6 @@ fn writeFunction(jw: *Jw, f: ast.Function) Jw.Error!void {
                 try jw.objectField("Unnamed");
                 switch (ufa) {
                     .expr => |e| switch (e.*) {
-                        // COUNT(*) etc: star parsed as Expr.wildcard, oracle wants string "Wildcard"
                         .wildcard => try jw.write("Wildcard"),
                         else => {
                             // Non-wildcard expr args are wrapped in {"Expr": ...}
@@ -1365,16 +1520,46 @@ fn writeTableAlias(jw: *Jw, alias: ast_query.TableAlias) Jw.Error!void {
 fn writeJoinOperator(jw: *Jw, jo: ast_query.JoinOperator) Jw.Error!void {
     try jw.beginObject();
     switch (jo) {
-        .join => |jc| { try jw.objectField("Join"); try writeJoinConstraint(jw, jc); },
-        .inner => |jc| { try jw.objectField("Inner"); try writeJoinConstraint(jw, jc); },
-        .left_outer => |jc| { try jw.objectField("Left"); try writeJoinConstraint(jw, jc); },
-        .right_outer => |jc| { try jw.objectField("RightOuter"); try writeJoinConstraint(jw, jc); },
-        .full_outer => |jc| { try jw.objectField("Full"); try writeJoinConstraint(jw, jc); },
-        .cross_join => { try jw.objectField("CrossJoin"); try jw.write("None"); },
-        .natural_inner => { try jw.objectField("Join"); try jw.write("Natural"); },
-        .natural_left => { try jw.objectField("Left"); try jw.write("Natural"); },
-        .natural_right => { try jw.objectField("RightOuter"); try jw.write("Natural"); },
-        .natural_full => { try jw.objectField("FullOuter"); try jw.write("Natural"); },
+        .join => |jc| {
+            try jw.objectField("Join");
+            try writeJoinConstraint(jw, jc);
+        },
+        .inner => |jc| {
+            try jw.objectField("Inner");
+            try writeJoinConstraint(jw, jc);
+        },
+        .left_outer => |jc| {
+            try jw.objectField("Left");
+            try writeJoinConstraint(jw, jc);
+        },
+        .right_outer => |jc| {
+            try jw.objectField("RightOuter");
+            try writeJoinConstraint(jw, jc);
+        },
+        .full_outer => |jc| {
+            try jw.objectField("Full");
+            try writeJoinConstraint(jw, jc);
+        },
+        .cross_join => {
+            try jw.objectField("CrossJoin");
+            try jw.write("None");
+        },
+        .natural_inner => {
+            try jw.objectField("Join");
+            try jw.write("Natural");
+        },
+        .natural_left => {
+            try jw.objectField("Left");
+            try jw.write("Natural");
+        },
+        .natural_right => {
+            try jw.objectField("RightOuter");
+            try jw.write("Natural");
+        },
+        .natural_full => {
+            try jw.objectField("FullOuter");
+            try jw.write("Natural");
+        },
     }
     try jw.endObject();
 }
@@ -1382,10 +1567,13 @@ fn writeJoinOperator(jw: *Jw, jo: ast_query.JoinOperator) Jw.Error!void {
 fn writeJoinConstraint(jw: *Jw, jc: ast_query.JoinConstraint) Jw.Error!void {
     try jw.beginObject();
     switch (jc) {
-        .on => |e| { try jw.objectField("On"); try writeExpr(jw, e); },
+        .on => |e| {
+            try jw.objectField("On");
+            try writeExpr(jw, e);
+        },
         .using => |cols| {
             try jw.objectField("Using");
-            // Oracle wraps each ident in [{"Identifier": ...}]
+            // Wraps each ident in [{"Identifier": ...}]
             try jw.beginArray();
             for (cols) |c| {
                 try jw.beginArray();
@@ -1397,8 +1585,14 @@ fn writeJoinConstraint(jw: *Jw, jc: ast_query.JoinConstraint) Jw.Error!void {
             }
             try jw.endArray();
         },
-        .natural => { try jw.objectField("Natural"); try jw.write(null); },
-        .none => { try jw.objectField("None"); try jw.write(null); },
+        .natural => {
+            try jw.objectField("Natural");
+            try jw.write(null);
+        },
+        .none => {
+            try jw.objectField("None");
+            try jw.write(null);
+        },
     }
     try jw.endObject();
 }
@@ -1767,7 +1961,7 @@ fn writeUpdate(jw: *Jw, upd: ast_dml.Update) Jw.Error!void {
     try writeTokenWithSpan(jw, upd.token);
     try jw.objectField("optimizer_hint");
     try jw.write(null);
-    // table: single TableWithJoins (oracle uses first element)
+    // table: single TableWithJoins
     try jw.objectField("table");
     if (upd.table.len > 0) {
         try writeTableWithJoins(jw, upd.table[0]);
@@ -1979,10 +2173,11 @@ fn writeColumnOption(jw: *Jw, co: ast_ddl.ColumnOption) Jw.Error!void {
             try jw.beginObject();
             try jw.objectField("Default");
             // CURRENT_TIMESTAMP, CURRENT_DATE, NOW() etc. are parsed as Identifier
-            // but the oracle emits them as zero-arg Function calls.
+            // but should be emitted as zero-arg Function calls.
             const zero_arg_fns = [_][]const u8{
-                "CURRENT_TIMESTAMP", "CURRENT_DATE", "CURRENT_TIME",
-                "LOCALTIME", "LOCALTIMESTAMP", "NOW", "SYSDATE",
+                "CURRENT_TIMESTAMP", "CURRENT_DATE",   "CURRENT_TIME",
+                "LOCALTIME",         "LOCALTIMESTAMP", "NOW",
+                "SYSDATE",
             };
             const is_zero_arg_fn = switch (e) {
                 .identifier => |id| blk: {
@@ -2459,8 +2654,14 @@ fn writeAlterTableOp(jw: *Jw, op: ast_ddl.AlterTableOperation) Jw.Error!void {
 fn writeMysqlColumnPosition(jw: *Jw, cp: ast_ddl.MySQLColumnPosition) Jw.Error!void {
     try jw.beginObject();
     switch (cp) {
-        .first => { try jw.objectField("First"); try jw.write(null); },
-        .after => |id| { try jw.objectField("After"); try writeIdent(jw, id); },
+        .first => {
+            try jw.objectField("First");
+            try jw.write(null);
+        },
+        .after => |id| {
+            try jw.objectField("After");
+            try writeIdent(jw, id);
+        },
     }
     try jw.endObject();
 }
@@ -2468,10 +2669,22 @@ fn writeMysqlColumnPosition(jw: *Jw, cp: ast_ddl.MySQLColumnPosition) Jw.Error!v
 fn writeAlterColumnOp(jw: *Jw, op: ast_ddl.AlterColumnOperation) Jw.Error!void {
     try jw.beginObject();
     switch (op) {
-        .set_not_null => { try jw.objectField("SetNotNull"); try jw.write(null); },
-        .drop_not_null => { try jw.objectField("DropNotNull"); try jw.write(null); },
-        .set_default => |e| { try jw.objectField("SetDefault"); try writeExpr(jw, e); },
-        .drop_default => { try jw.objectField("DropDefault"); try jw.write(null); },
+        .set_not_null => {
+            try jw.objectField("SetNotNull");
+            try jw.write(null);
+        },
+        .drop_not_null => {
+            try jw.objectField("DropNotNull");
+            try jw.write(null);
+        },
+        .set_default => |e| {
+            try jw.objectField("SetDefault");
+            try writeExpr(jw, e);
+        },
+        .drop_default => {
+            try jw.objectField("DropDefault");
+            try jw.write(null);
+        },
         .set_data_type => |sdt| {
             try jw.objectField("SetDataType");
             try writeDataType(jw, sdt.data_type);

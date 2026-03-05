@@ -2,6 +2,7 @@ const std = @import("std");
 const span = @import("span.zig");
 const keywords = @import("keywords.zig");
 const errors = @import("errors.zig");
+const simd = @import("simd.zig");
 
 pub const Location = span.Location;
 pub const Span = span.Span;
@@ -150,6 +151,28 @@ const State = struct {
             self.col += 1;
         }
         return ch;
+    }
+
+    /// Advance position to `new_pos` when the skipped bytes contain no newlines.
+    /// Updates col by the distance jumped.
+    fn advanceTo(self: *State, new_pos: usize) void {
+        self.col += new_pos - self.pos;
+        self.pos = new_pos;
+    }
+
+    /// Advance position to `new_pos`, scanning skipped bytes for newlines
+    /// to keep line/col accurate. Use for regions that may contain newlines
+    /// (e.g. string literals).
+    fn advanceToWithLineTracking(self: *State, new_pos: usize) void {
+        for (self.input[self.pos..new_pos]) |c| {
+            if (c == '\n') {
+                self.line += 1;
+                self.col = 1;
+            } else {
+                self.col += 1;
+            }
+        }
+        self.pos = new_pos;
     }
 
     fn location(self: *const State) Location {
@@ -605,9 +628,7 @@ pub const Tokenizer = struct {
     fn tokenizeNumber(_: *Tokenizer, s: *State) error{TokenizerError}!Token {
         const start = s.pos;
         // Consume integer part.
-        while (s.peek()) |c| {
-            if (c >= '0' and c <= '9') _ = s.next() else break;
-        }
+        s.advanceTo(simd.findNumberEnd(s.input, s.pos));
 
         // 0x hex literal.
         if (s.pos - start == 1 and s.input[start] == '0') {
@@ -624,9 +645,7 @@ pub const Tokenizer = struct {
         // Decimal point.
         if (s.peek() == '.') {
             _ = s.next();
-            while (s.peek()) |c| {
-                if (c >= '0' and c <= '9') _ = s.next() else break;
-            }
+            s.advanceTo(simd.findNumberEnd(s.input, s.pos));
         }
 
         // Exponent.
@@ -637,9 +656,7 @@ pub const Tokenizer = struct {
                 if (after_sign != null and after_sign.? >= '0' and after_sign.? <= '9') {
                     _ = s.next(); // 'e'/'E'
                     if (is_sign) _ = s.next(); // sign
-                    while (s.peek()) |c| {
-                        if (c >= '0' and c <= '9') _ = s.next() else break;
-                    }
+                    s.advanceTo(simd.findNumberEnd(s.input, s.pos));
                 }
             }
         }
@@ -657,9 +674,7 @@ pub const Tokenizer = struct {
         if (s.peek()) |c| {
             if (c >= '0' and c <= '9') {
                 const start = s.pos - 1; // include the '.'
-                while (s.peek()) |d| {
-                    if (d >= '0' and d <= '9') _ = s.next() else break;
-                }
+                s.advanceTo(simd.findNumberEnd(s.input, s.pos));
                 // Exponent.
                 if (s.peek() == 'e' or s.peek() == 'E') {
                     if (s.peekN(1)) |next| {
@@ -668,9 +683,7 @@ pub const Tokenizer = struct {
                         if (after_sign != null and after_sign.? >= '0' and after_sign.? <= '9') {
                             _ = s.next();
                             if (is_sign) _ = s.next();
-                            while (s.peek()) |d| {
-                                if (d >= '0' and d <= '9') _ = s.next() else break;
-                            }
+                            s.advanceTo(simd.findNumberEnd(s.input, s.pos));
                         }
                     }
                 }
@@ -689,9 +702,8 @@ pub const Tokenizer = struct {
     fn tokenizeIdentifierOrKeyword(_: *Tokenizer, s: *State) error{TokenizerError}!Token {
         const start = s.pos;
         _ = s.next(); // consume first char
-        while (s.peek()) |c| {
-            if (isIdentifierPart(c)) _ = s.next() else break;
-        }
+        const end = simd.findIdentifierEnd(s.input, s.pos);
+        s.advanceTo(end);
         const word = s.input[start..s.pos];
         return makeWord(word, null);
     }
@@ -700,9 +712,8 @@ pub const Tokenizer = struct {
     fn finishIdentifier(_: *Tokenizer, s: *State) error{TokenizerError}!Token {
         // The char at pos - 1 was already consumed.
         const start = s.pos - 1;
-        while (s.peek()) |c| {
-            if (isIdentifierPart(c)) _ = s.next() else break;
-        }
+        const end = simd.findIdentifierEnd(s.input, s.pos);
+        s.advanceTo(end);
         const word = s.input[start..s.pos];
         return makeWord(word, null);
     }
@@ -722,7 +733,17 @@ pub const Tokenizer = struct {
         backslash_escape: bool,
     ) error{TokenizerError}![]const u8 {
         const start = s.pos;
-        while (s.peek()) |c| {
+        while (s.pos < s.input.len) {
+            // SIMD-skip to the next quote or escape character.
+            const hit = simd.findQuoteEnd(s.input, s.pos, quote, backslash_escape);
+            if (hit >= s.input.len) {
+                // No quote/escape found -- advance to end and report error.
+                s.advanceToWithLineTracking(s.input.len);
+                break;
+            }
+            // Advance state (with line tracking since strings may span lines).
+            s.advanceToWithLineTracking(hit);
+            const c = s.input[s.pos];
             if (c == '\\' and backslash_escape) {
                 _ = s.next(); // backslash
                 _ = s.next(); // escaped char
@@ -753,7 +774,17 @@ pub const Tokenizer = struct {
         quote_end: u8,
     ) error{TokenizerError}![]const u8 {
         const start = s.pos;
-        while (s.peek()) |c| {
+        while (s.pos < s.input.len) {
+            // SIMD-skip to the next closing quote candidate.
+            // Use line tracking since quoted identifiers could theoretically
+            // contain newlines in malformed input.
+            const hit = simd.findQuoteEnd(s.input, s.pos, quote_end, false);
+            if (hit >= s.input.len) {
+                s.advanceToWithLineTracking(s.input.len);
+                break;
+            }
+            s.advanceToWithLineTracking(hit);
+            const c = s.input[s.pos];
             if (c == quote_end) {
                 if (s.peekN(1) == quote_end) {
                     _ = s.next();

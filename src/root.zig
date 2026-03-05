@@ -8,6 +8,7 @@ pub const span_mod = @import("span.zig");
 pub const errors_mod = @import("errors.zig");
 pub const keywords_mod = @import("keywords.zig");
 pub const tokenizer_mod = @import("tokenizer.zig");
+pub const simd_mod = @import("simd.zig");
 
 // Phase 1 re-exports
 pub const Location = span_mod.Location;

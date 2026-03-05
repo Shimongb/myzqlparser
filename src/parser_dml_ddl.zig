@@ -487,7 +487,7 @@ fn parseOptionalTableConstraint(p: *Parser) ParseError!?TableConstraint {
         // MySQL allows CONSTRAINT without a name if the next word is a constraint keyword.
         if (p.dialect.supportsConstraintKeywordWithoutName() and
             (p.peekIsKeyword(.CHECK) or p.peekIsKeyword(.PRIMARY) or
-            p.peekIsKeyword(.UNIQUE) or p.peekIsKeyword(.FOREIGN)))
+                p.peekIsKeyword(.UNIQUE) or p.peekIsKeyword(.FOREIGN)))
         {
             break :blk null;
         }
