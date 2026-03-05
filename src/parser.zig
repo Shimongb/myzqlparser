@@ -141,12 +141,51 @@ pub const Parser = struct {
         const tok = self.nextToken();
         switch (tok.token) {
             .Word => |w| switch (w.keyword) {
-                .SELECT, .WITH, .VALUES => {
+                .SELECT, .VALUES => {
                     self.prevToken();
                     const q = try self.parseQuery();
                     const owned = try self.allocator.create(Query);
                     owned.* = q;
                     return Statement{ .select = owned };
+                },
+                .WITH => {
+                    // Parse the WITH clause, then dispatch based on the next keyword.
+                    const with = try self.parseWith(tok);
+                    if (self.peekIsKeyword(.DELETE)) {
+                        const del_tok = self.nextToken();
+                        var stmt = try dml_ddl.parseDelete(self, del_tok);
+                        stmt.delete.with = with;
+                        return stmt;
+                    } else if (self.peekIsKeyword(.UPDATE)) {
+                        const upd_tok = self.nextToken();
+                        var stmt = try dml_ddl.parseUpdate(self, upd_tok);
+                        stmt.update.with = with;
+                        return stmt;
+                    } else {
+                        // SELECT or VALUES — parse as a full query with the CTE attached.
+                        const body = try self.parseSetExpr();
+                        const body_ptr = try self.allocator.create(SetExpr);
+                        body_ptr.* = body;
+                        var order_by: ?OrderBy = null;
+                        if (self.parseKeywords(&.{ .ORDER, .BY })) {
+                            order_by = try self.parseOrderBy();
+                        }
+                        var limit_clause: ?LimitClause = null;
+                        if (self.parseKeyword(.LIMIT)) {
+                            limit_clause = try self.parseLimitClause();
+                        }
+                        const q = Query{
+                            .with = with,
+                            .body = body_ptr,
+                            .order_by = order_by,
+                            .limit_clause = limit_clause,
+                            .fetch = null,
+                            .locks = &.{},
+                        };
+                        const owned = try self.allocator.create(Query);
+                        owned.* = q;
+                        return Statement{ .select = owned };
+                    }
                 },
                 .INSERT => return try dml_ddl.parseInsert(self, tok),
                 .REPLACE => return try dml_ddl.parseReplace(self, tok),

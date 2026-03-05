@@ -7,6 +7,7 @@ pub const ObjectName = ast.ObjectName;
 pub const Expr = ast.Expr;
 pub const Assignment = ast.Assignment;
 pub const Query = ast_query.Query;
+pub const With = ast_query.With;
 pub const SelectItem = ast_query.SelectItem;
 pub const TableWithJoins = ast_query.TableWithJoins;
 pub const TableFactor = ast_query.TableFactor;
@@ -78,6 +79,8 @@ pub const InsertSource = union(enum) {
 pub const Update = struct {
     /// The UPDATE keyword token with source span.
     token: @import("tokenizer.zig").TokenWithSpan = .{ .token = .{ .EOF = {} }, .span = .empty },
+    /// Optional WITH clause (CTEs).
+    with: ?With = null,
     /// Table(s) to update.
     table: []const TableWithJoins,
     /// SET col = expr, ... assignments.
@@ -100,6 +103,8 @@ pub const Update = struct {
 pub const Delete = struct {
     /// The DELETE keyword token with source span.
     token: @import("tokenizer.zig").TokenWithSpan = .{ .token = .{ .EOF = {} }, .span = .empty },
+    /// Optional WITH clause (CTEs).
+    with: ?With = null,
     /// Target table(s) to delete from.
     ///
     /// MySQL allows multi-table DELETE: `DELETE t1, t2 FROM t1 JOIN t2 ...`

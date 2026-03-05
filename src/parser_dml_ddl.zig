@@ -1248,6 +1248,72 @@ test "parse DELETE without WHERE" {
     try std.testing.expect(del.selection == null);
 }
 
+test "parse CTE + DELETE" {
+    var result = try parseOneGeneric(
+        "WITH q AS (SELECT id FROM users WHERE active = 0) DELETE users FROM users JOIN q ON users.id = q.id WHERE users.status = 'inactive'",
+    );
+    defer result.arena.deinit();
+    const del = switch (result.stmt) {
+        .delete => |d| d,
+        else => return error.TestFailed,
+    };
+    // WITH clause should be present with one CTE.
+    try std.testing.expect(del.with != null);
+    try std.testing.expectEqual(@as(usize, 1), del.with.?.cte_tables.len);
+    try std.testing.expectEqualStrings("q", del.with.?.cte_tables[0].alias.name.value);
+    try std.testing.expect(!del.with.?.recursive);
+    // Multi-table DELETE: tables = [users], from = [users JOIN q ...]
+    try std.testing.expectEqual(@as(usize, 1), del.tables.len);
+    try std.testing.expectEqual(@as(usize, 1), del.from.len);
+    try std.testing.expect(del.selection != null);
+}
+
+test "parse CTE + DELETE FROM (single-table)" {
+    var result = try parseOneGeneric(
+        "WITH cte AS (SELECT id FROM t) DELETE FROM t WHERE id IN (SELECT id FROM cte)",
+    );
+    defer result.arena.deinit();
+    const del = switch (result.stmt) {
+        .delete => |d| d,
+        else => return error.TestFailed,
+    };
+    try std.testing.expect(del.with != null);
+    try std.testing.expectEqual(@as(usize, 1), del.with.?.cte_tables.len);
+    try std.testing.expectEqual(@as(usize, 0), del.tables.len);
+    try std.testing.expectEqual(@as(usize, 1), del.from.len);
+}
+
+test "parse CTE + UPDATE" {
+    var result = try parseOneGeneric(
+        "WITH cte AS (SELECT id, new_name FROM source) UPDATE target SET name = 'x' WHERE id IN (SELECT id FROM cte)",
+    );
+    defer result.arena.deinit();
+    const upd = switch (result.stmt) {
+        .update => |u| u,
+        else => return error.TestFailed,
+    };
+    try std.testing.expect(upd.with != null);
+    try std.testing.expectEqual(@as(usize, 1), upd.with.?.cte_tables.len);
+    try std.testing.expectEqualStrings("cte", upd.with.?.cte_tables[0].alias.name.value);
+    try std.testing.expectEqual(@as(usize, 1), upd.table.len);
+    try std.testing.expectEqual(@as(usize, 1), upd.assignments.len);
+    try std.testing.expect(upd.selection != null);
+}
+
+test "parse CTE RECURSIVE + DELETE" {
+    var result = try parseOneGeneric(
+        "WITH RECURSIVE tree AS (SELECT id, parent_id FROM nodes WHERE parent_id IS NULL UNION ALL SELECT n.id, n.parent_id FROM nodes n JOIN tree t ON n.parent_id = t.id) DELETE FROM nodes WHERE id IN (SELECT id FROM tree)",
+    );
+    defer result.arena.deinit();
+    const del = switch (result.stmt) {
+        .delete => |d| d,
+        else => return error.TestFailed,
+    };
+    try std.testing.expect(del.with != null);
+    try std.testing.expect(del.with.?.recursive);
+    try std.testing.expectEqualStrings("tree", del.with.?.cte_tables[0].alias.name.value);
+}
+
 // ============================================================================
 // CREATE TABLE tests
 // ============================================================================
