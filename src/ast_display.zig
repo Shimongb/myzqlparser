@@ -643,18 +643,22 @@ pub fn writeOrderByExpr(w: *Writer, ob: ast.OrderByExpr) Writer.Error!void {
 // Query (stub -- full implementation after parser stabilizes)
 // ---------------------------------------------------------------------------
 
+fn writeWith(w: *Writer, with: ast_query.With) Writer.Error!void {
+    try w.writeAll("WITH ");
+    if (with.recursive) try w.writeAll("RECURSIVE ");
+    for (with.cte_tables, 0..) |cte, i| {
+        if (i > 0) try w.writeAll(", ");
+        try writeIdent(w, cte.alias.name);
+        try w.writeAll(" AS (");
+        try writeQuery(w, cte.query.*);
+        try w.writeByte(')');
+    }
+    try w.writeByte(' ');
+}
+
 pub fn writeQuery(w: *Writer, q: ast_query.Query) Writer.Error!void {
     if (q.with) |with| {
-        try w.writeAll("WITH ");
-        if (with.recursive) try w.writeAll("RECURSIVE ");
-        for (with.cte_tables, 0..) |cte, i| {
-            if (i > 0) try w.writeAll(", ");
-            try writeIdent(w, cte.alias.name);
-            try w.writeAll(" AS (");
-            try writeQuery(w, cte.query.*);
-            try w.writeByte(')');
-        }
-        try w.writeByte(' ');
+        try writeWith(w, with);
     }
     try writeSetExpr(w, q.body.*);
     if (q.order_by) |ob| {
@@ -932,6 +936,9 @@ pub fn writeStatement(w: *Writer, stmt: ast.Statement) Writer.Error!void {
             }
         },
         .update => |upd| {
+            if (upd.with) |with| {
+                try writeWith(w, with);
+            }
             try w.writeAll("UPDATE ");
             for (upd.table, 0..) |twj, i| {
                 if (i > 0) try w.writeAll(", ");
@@ -953,7 +960,18 @@ pub fn writeStatement(w: *Writer, stmt: ast.Statement) Writer.Error!void {
             }
         },
         .delete => |del| {
-            try w.writeAll("DELETE FROM ");
+            if (del.with) |with| {
+                try writeWith(w, with);
+            }
+            try w.writeAll("DELETE ");
+            if (del.tables.len > 0) {
+                for (del.tables, 0..) |tbl, i| {
+                    if (i > 0) try w.writeAll(", ");
+                    try writeObjectName(w, tbl);
+                }
+                try w.writeAll(" ");
+            }
+            try w.writeAll("FROM ");
             for (del.from, 0..) |twj, i| {
                 if (i > 0) try w.writeAll(", ");
                 try writeTableWithJoins(w, twj);
