@@ -35,6 +35,10 @@ pub const Parser = parser_mod.Parser;
 pub const ast_display = @import("ast_display.zig");
 pub const ast_json = @import("ast_json.zig");
 
+// Visitor and analysis
+pub const visitor_mod = @import("visitor.zig");
+pub const analysis_mod = @import("analysis.zig");
+
 pub const ast_operator = @import("ast_operator.zig");
 pub const ast_types = @import("ast_types.zig");
 pub const ast = @import("ast.zig");
@@ -93,6 +97,21 @@ pub const Insert = ast_dml.Insert;
 pub const Update = ast_dml.Update;
 pub const Delete = ast_dml.Delete;
 pub const InsertSource = ast_dml.InsertSource;
+
+// Visitor
+pub const Walker = visitor_mod.Walker;
+
+// Analysis
+pub const QueryCategory = analysis_mod.QueryCategory;
+pub const QueryType = analysis_mod.QueryType;
+pub const QueryClassification = analysis_mod.QueryClassification;
+pub const classifyStatement = analysis_mod.classifyStatement;
+pub const classifyStatements = analysis_mod.classifyStatements;
+pub const TableRef = analysis_mod.TableRef;
+pub const extractTables = analysis_mod.extractTables;
+pub const ColumnUsage = analysis_mod.ColumnUsage;
+pub const ColumnRef = analysis_mod.ColumnRef;
+pub const extractColumns = analysis_mod.extractColumns;
 
 /// Options for controlling parser behavior.
 pub const ParseOptions = struct {
