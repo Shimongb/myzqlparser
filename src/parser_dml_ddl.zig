@@ -487,7 +487,7 @@ fn parseOptionalTableConstraint(p: *Parser) ParseError!?TableConstraint {
         // MySQL allows CONSTRAINT without a name if the next word is a constraint keyword.
         if (p.dialect.supportsConstraintKeywordWithoutName() and
             (p.peekIsKeyword(.CHECK) or p.peekIsKeyword(.PRIMARY) or
-                p.peekIsKeyword(.UNIQUE) or p.peekIsKeyword(.FOREIGN)))
+            p.peekIsKeyword(.UNIQUE) or p.peekIsKeyword(.FOREIGN)))
         {
             break :blk null;
         }
@@ -952,6 +952,31 @@ fn parseAlterTableAlterColumn(p: *Parser) ParseError!AlterTableOperation {
         .column_name = column_name,
         .op = op,
     } };
+}
+
+// ============================================================================
+// RENAME TABLE (standalone MySQL statement)
+// ============================================================================
+
+/// Parse a RENAME TABLE statement. Called after RENAME TABLE has been consumed.
+/// Syntax: RENAME TABLE t1 TO t2 [, t3 TO t4 ...]
+pub fn parseRenameTable(p: *Parser) ParseError!Statement {
+    const alloc = p.allocator;
+    var pairs: std.ArrayList(ast.RenameTablePair) = .empty;
+    try pairs.ensureTotalCapacity(alloc, 2);
+
+    while (true) {
+        const old_name = try p.parseObjectName();
+        try p.expectKeyword(.TO);
+        const new_name = try p.parseObjectName();
+        try pairs.append(alloc, .{
+            .old_name = old_name,
+            .new_name = new_name,
+        });
+        if (!p.consumeToken(.Comma)) break;
+    }
+
+    return .{ .rename_table = try pairs.toOwnedSlice(alloc) };
 }
 
 /// Parse optional FIRST | AFTER column_name (MySQL column position).
@@ -1794,6 +1819,50 @@ test "parse ALTER TABLE RENAME COLUMN" {
         },
         else => return error.TestFailed,
     }
+}
+
+test "parse RENAME TABLE single pair" {
+    var result = try parseOneMysql("RENAME TABLE users TO customers");
+    defer result.arena.deinit();
+    const pairs = switch (result.stmt) {
+        .rename_table => |p| p,
+        else => return error.TestFailed,
+    };
+    try std.testing.expectEqual(@as(usize, 1), pairs.len);
+    try std.testing.expectEqualStrings("users", pairs[0].old_name.parts[0].value);
+    try std.testing.expectEqualStrings("customers", pairs[0].new_name.parts[0].value);
+}
+
+test "parse RENAME TABLE multiple pairs" {
+    var result = try parseOneMysql("RENAME TABLE t1 TO t2, t3 TO t4, t5 TO t6");
+    defer result.arena.deinit();
+    const pairs = switch (result.stmt) {
+        .rename_table => |p| p,
+        else => return error.TestFailed,
+    };
+    try std.testing.expectEqual(@as(usize, 3), pairs.len);
+    try std.testing.expectEqualStrings("t1", pairs[0].old_name.parts[0].value);
+    try std.testing.expectEqualStrings("t2", pairs[0].new_name.parts[0].value);
+    try std.testing.expectEqualStrings("t3", pairs[1].old_name.parts[0].value);
+    try std.testing.expectEqualStrings("t4", pairs[1].new_name.parts[0].value);
+    try std.testing.expectEqualStrings("t5", pairs[2].old_name.parts[0].value);
+    try std.testing.expectEqualStrings("t6", pairs[2].new_name.parts[0].value);
+}
+
+test "parse RENAME TABLE with qualified names" {
+    var result = try parseOneMysql("RENAME TABLE mydb.old_table TO mydb.new_table");
+    defer result.arena.deinit();
+    const pairs = switch (result.stmt) {
+        .rename_table => |p| p,
+        else => return error.TestFailed,
+    };
+    try std.testing.expectEqual(@as(usize, 1), pairs.len);
+    try std.testing.expectEqual(@as(usize, 2), pairs[0].old_name.parts.len);
+    try std.testing.expectEqualStrings("mydb", pairs[0].old_name.parts[0].value);
+    try std.testing.expectEqualStrings("old_table", pairs[0].old_name.parts[1].value);
+    try std.testing.expectEqual(@as(usize, 2), pairs[0].new_name.parts.len);
+    try std.testing.expectEqualStrings("mydb", pairs[0].new_name.parts[0].value);
+    try std.testing.expectEqualStrings("new_table", pairs[0].new_name.parts[1].value);
 }
 
 test "parse ALTER TABLE DROP PRIMARY KEY" {

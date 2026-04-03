@@ -88,6 +88,7 @@ pub fn classifyStatement(stmt: Statement) QueryClassification {
         .create_index => .{ .category = .ddl, .query_type = .create },
         .create_view => .{ .category = .ddl, .query_type = .create },
         .drop_view => .{ .category = .ddl, .query_type = .drop },
+        .rename_table => .{ .category = .ddl, .query_type = .alter },
         .show_tables, .show_columns, .show_create_table, .show_databases, .show_create_view => .{ .category = .show, .query_type = .show },
         .lock_tables => .{ .category = .other, .query_type = .lock },
         .unlock_tables => .{ .category = .other, .query_type = .unlock },

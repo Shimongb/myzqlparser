@@ -1667,6 +1667,22 @@ pub fn writeStatement(jw: *Jw, stmt: ast.Statement) Jw.Error!void {
             try writeObjectName(jw, dv.name);
             try jw.endObject();
         },
+        .rename_table => |pairs| {
+            try jw.objectField("RenameTable");
+            try jw.beginObject();
+            try jw.objectField("operations");
+            try jw.beginArray();
+            for (pairs) |pair| {
+                try jw.beginObject();
+                try jw.objectField("old_name");
+                try writeObjectName(jw, pair.old_name);
+                try jw.objectField("new_name");
+                try writeObjectName(jw, pair.new_name);
+                try jw.endObject();
+            }
+            try jw.endArray();
+            try jw.endObject();
+        },
         .show_tables => {
             try jw.objectField("ShowTables");
             try jw.beginObject();
