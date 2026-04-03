@@ -113,7 +113,7 @@ pub fn Walker(comptime V: type) type {
                 .create_index => |ci| self.walkCreateIndex(ci),
                 .create_view => |cv| self.walkQuery(cv.query),
                 .set => |s| self.walkExpr(&s.value),
-                .drop, .drop_view, .show_tables, .show_columns, .show_create_table, .show_databases, .show_create_view, .lock_tables, .unlock_tables, .start_transaction, .commit, .rollback, .use_db => {},
+                .drop, .drop_view, .rename_table, .show_tables, .show_columns, .show_create_table, .show_databases, .show_create_view, .lock_tables, .unlock_tables, .start_transaction, .commit, .rollback, .use_db => {},
             }
         }
 

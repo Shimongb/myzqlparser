@@ -474,6 +474,8 @@ pub const Statement = union(enum) {
         if_exists: bool,
         name: ObjectName,
     },
+    /// RENAME TABLE t1 TO t2 [, t3 TO t4 ...] (MySQL standalone statement).
+    rename_table: []const RenameTablePair,
 
     // MySQL SHOW statements
     /// SHOW TABLES [FROM db]
@@ -506,6 +508,14 @@ pub const Statement = union(enum) {
     set: struct { name: ObjectName, value: Expr },
     /// USE database
     use_db: Ident,
+};
+
+/// A single old->new table name pair in a RENAME TABLE statement.
+pub const RenameTablePair = struct {
+    /// The original table name.
+    old_name: ObjectName,
+    /// The new table name.
+    new_name: ObjectName,
 };
 
 /// A single table entry in a LOCK TABLES statement.

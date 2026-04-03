@@ -1039,6 +1039,15 @@ pub fn writeStatement(w: *Writer, stmt: ast.Statement) Writer.Error!void {
             try w.writeAll(" AS ");
             try writeQuery(w, cv.query.*);
         },
+        .rename_table => |pairs| {
+            try w.writeAll("RENAME TABLE ");
+            for (pairs, 0..) |pair, i| {
+                if (i > 0) try w.writeAll(", ");
+                try writeObjectName(w, pair.old_name);
+                try w.writeAll(" TO ");
+                try writeObjectName(w, pair.new_name);
+            }
+        },
         .drop_view => |dv| {
             try w.writeAll("DROP VIEW ");
             if (dv.if_exists) try w.writeAll("IF EXISTS ");

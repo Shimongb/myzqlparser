@@ -196,6 +196,10 @@ pub const Parser = struct {
                     try self.expectKeyword(.TABLE);
                     return try dml_ddl.parseAlterTable(self);
                 },
+                .RENAME => {
+                    try self.expectKeyword(.TABLE);
+                    return try dml_ddl.parseRenameTable(self);
+                },
                 .DROP => return try dml_ddl.parseDrop(self),
                 .SHOW => return try self.parseShow(),
                 .USE => return try self.parseUse(),
